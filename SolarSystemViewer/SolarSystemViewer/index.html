@@ -1,0 +1,246 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Solar System Viewer</title>
+    <meta charset="utf-8" />
+
+    <link rel="stylesheet" href="css/solarsystem.css">
+
+    <script type="application/x-glsl" id="sky-vertex">
+        varying vec2 vUv;
+
+        void main() {
+        vUv = uv;
+        vec4 pos = vec4(position, 1.0);
+        gl_Position = projectionMatrix * modelViewMatrix * pos;
+        }
+    </script>
+    <script type="application/x-glsl" id="sky-fragment">
+        uniform sampler2D texture;
+        varying vec2 vUv;
+
+        void main() {
+        vec4 sample = texture2D(texture, vUv * 3.0);
+        gl_FragColor = vec4(sample.xyz, sample.w);
+        }
+    </script>
+
+    <script type="x-shader/x-vertex" id="planet-vertex">
+        attribute vec4 tangent;
+
+        uniform vec3 lightPosition;
+        uniform vec4 color;
+        varying vec3 vNormal;
+        varying vec3 cameraVector;
+        varying vec4 atmosphereTint;
+
+        varying vec2 vUv;
+        varying mat3 tbn;
+        varying vec3 vLightVector;
+
+        void main() {
+        vUv = uv;
+
+        /** Create tangent-binormal-normal matrix used to transform
+        coordinates from object space to tangent space */
+        vNormal = normalize(normalMatrix * normal);
+        vec3 vTangent = normalize( normalMatrix * tangent.xyz );
+        vec3 vBinormal = normalize(cross( vNormal, vTangent ) * tangent.w);
+        tbn = mat3(vTangent, vBinormal, vNormal);
+
+        /** Calculate the vertex-to-light vector */
+        vec4 lightVector = viewMatrix * vec4(lightPosition, 1.0);
+        vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+        vLightVector = normalize(lightVector.xyz - modelViewPosition.xyz);
+
+        /** Pass the camera vector to fragment shader */
+        cameraVector = modelViewPosition.xyz;
+
+        /** Pass the planet specific tint to the fragment shader */
+        atmosphereTint = color;
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="planet-fragment">
+        uniform sampler2D texture;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vLightVector;
+        varying vec3 cameraVector;
+        varying vec4 atmosphereTint;
+
+        void main() {
+        vec4 sample = texture2D(texture, vUv);
+        float light = dot(vLightVector, vNormal);
+        float fresnel = dot(normalize(cameraVector), vNormal) * 0.5 + 0.5;
+        vec3 atmosphere = atmosphereTint.xyz * fresnel;
+        atmosphere *= atmosphere;
+
+        vec3 diffuse = (sample.xyz + atmosphere) * max(0.0, light);
+        diffuse += atmosphere * max(0.0 , light + 0.8);
+
+        gl_FragColor = vec4(diffuse, sample.w);
+        }
+    </script>
+    <script type="x-shader/x-vertex" id="sun-vertex">
+        attribute vec4 tangent;
+
+        uniform vec4 color;
+
+        varying vec3 vNormal;
+        varying vec3 cameraVector;
+        varying vec4 atmosphereTint;
+        varying vec2 vUv;
+        varying mat3 tbn;
+
+        void main() {
+        vUv = uv;
+
+        /** Create tangent-binormal-normal matrix used to transform
+        coordinates from object space to tangent space */
+        vNormal = normalize(normalMatrix * normal);
+        vec3 vTangent = normalize( normalMatrix * tangent.xyz );
+        vec3 vBinormal = normalize(cross( vNormal, vTangent ) * tangent.w);
+        tbn = mat3(vTangent, vBinormal, vNormal);
+
+        /** Convert object space coordinates to view space coordinates */
+        vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+
+        /** Pass the camera vector to fragment shader */
+        cameraVector = modelViewPosition.xyz;
+
+        /** Pass the planet specific tint to the fragment shader */
+        atmosphereTint = color;
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="sun-fragment">
+        uniform sampler2D texture;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 cameraVector;
+        varying vec4 atmosphereTint;
+
+        void main() {
+        vec4 sample = texture2D(texture, vUv);
+        float fresnel = dot(normalize(cameraVector), vNormal) * 0.5 + 0.7;
+        vec3 atmosphere = atmosphereTint.xyz * fresnel;
+        atmosphere *= atmosphere;
+
+        vec3 diffuse = sample.xyz + atmosphere;
+
+        gl_FragColor = vec4(diffuse, sample.w);
+        }
+    </script>
+    <script type="x-shader/x-vertex" id="post-vertex">   
+        varying vec2 vUv;        
+        
+        void main() {
+        vUv = vec2( uv.x, 1.0 - uv.y );
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="post-fragment">
+        varying vec2 vUv;
+        uniform sampler2D tDiffuse;
+        uniform float width;
+        uniform float height;
+
+        void main() {
+        float pixelWidth = 1.0/width;
+        float halfPixelWidth = pixelWidth * 0.5;
+        
+        vec4 blur = vec4(0, 0, 0, 1.0);
+        
+        
+        blur += texture2D( tDiffuse, vUv - vec2(pixelWidth * 10.0 + halfPixelWidth, 0.0)) * 0.06;
+        blur += texture2D( tDiffuse, vUv - vec2(pixelWidth * 7.0 + halfPixelWidth, 0.0)) * 0.10;
+        blur += texture2D( tDiffuse, vUv - vec2(pixelWidth * 4.0 + halfPixelWidth, 0.0)) * 0.13;
+        blur += texture2D( tDiffuse, vUv - vec2(pixelWidth * 1.0 + halfPixelWidth, 0.0)) * 0.16;
+
+        vec4 scene = texture2D(tDiffuse, vUv);
+        blur += scene * 0.10;
+
+        blur += texture2D( tDiffuse, vUv + vec2(pixelWidth * 1.0 + halfPixelWidth, 0.0)) * 0.16;
+        blur += texture2D( tDiffuse, vUv + vec2(pixelWidth * 4.0 + halfPixelWidth, 0.0)) * 0.13;
+        blur += texture2D( tDiffuse, vUv + vec2(pixelWidth * 7.0 + halfPixelWidth, 0.0)) * 0.10;
+        blur += texture2D( tDiffuse, vUv + vec2(pixelWidth * 10.0 + halfPixelWidth, 0.0)) * 0.06;
+            
+        //vec4 colorInput = texture2D( tDiffuse, vUv );        
+        gl_FragColor = max(blur, scene);       
+        }
+    </script>
+    <script type="x-shader/x-vertex" id="post2-vertex">
+        varying vec2 vUv;
+
+        void main() {
+        vUv = vec2( uv.x, 1.0 - uv.y );
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+    <script type="x-shader/x-fragment" id="post2-fragment">
+        varying vec2 vUv;
+        uniform sampler2D tDiffuse;        
+        uniform float height;
+
+        void main() {
+        
+        float pixelHeight = 1.0/height;
+        float halfPixelHeight = pixelHeight * 0.5;
+
+        vec4 blur = vec4(0, 0, 0, 1.0);
+
+
+        blur += texture2D( tDiffuse, vUv - vec2(0.0, pixelHeight * 10.0 + halfPixelHeight)) * 0.06;
+        blur += texture2D( tDiffuse, vUv - vec2(0.0, pixelHeight * 7.0 + halfPixelHeight)) * 0.10;
+        blur += texture2D( tDiffuse, vUv - vec2(0.0, pixelHeight * 4.0 + halfPixelHeight)) * 0.14;
+        blur += texture2D( tDiffuse, vUv - vec2(0.0, pixelHeight * 1.0 + halfPixelHeight)) * 0.16;
+
+        vec4 scene = texture2D(tDiffuse, vUv);
+        blur += scene * 0.10;
+
+        blur += texture2D( tDiffuse, vUv + vec2(0.0, pixelHeight * 1.0 + halfPixelHeight)) * 0.16;
+        blur += texture2D( tDiffuse, vUv + vec2(0.0, pixelHeight * 4.0 + halfPixelHeight)) * 0.14;
+        blur += texture2D( tDiffuse, vUv + vec2(0.0, pixelHeight * 7.0 + halfPixelHeight)) * 0.10;
+        blur += texture2D( tDiffuse, vUv + vec2(0.0, pixelHeight * 10.0 + halfPixelHeight)) * 0.06;
+
+        //vec4 colorInput = texture2D( tDiffuse, vUv );
+        gl_FragColor = max(blur, scene);        
+        }
+    </script>
+</head>
+<body>
+    <div id="container">
+    </div>
+    <div id="hud">
+
+        <div class="hud-panel centertop">
+            <h2><u>Interactive Solar System Viewer</u></h2>
+            <h3>Viewer Controls:</h3>
+            Move Camera: Left Mouse Drag<br />
+            Zoom: Mousewheel Scroll<br />
+            Speed: Up/Down Keys<br />
+            Change Focus: Left/Right Keys
+        </div>
+
+        <div class="hud-panel centerbottom">
+           <h1 id="txtPlanet">Current Focus: The Sun, Center of our Solar System</h1>
+        </div>
+
+    </div>
+    <script type="text/javascript" src="js/vendor/three.min.js"></script>
+    <script type="text/javascript" src="js/vendor/OrbitControls.js"></script>    
+    <script type="text/javascript" src="js/resources.js"></script>
+    <script type="text/javascript" src="js/planetdata.js"></script>
+    <script type="text/javascript" src="js/utils.js"></script>
+    <script type="text/javascript" src="js/solarsystem.js"></script>
+    <script type="text/javascript" src="js/postprocessing/EffectComposer.js"></script>
+    <script type="text/javascript" src="js/postprocessing/RenderPass.js"></script>
+    <script type="text/javascript" src="js/postprocessing/ShaderPass.js"></script>
+    <script type="text/javascript" src="js/postprocessing/CopyShader.js"></script>
+    <script type="text/javascript" src="js/postprocessing/TexturePass.js"></script>
+    <script type="text/javascript" src="js/postprocessing/MaskPass.js"></script>
+</body>
+</html>

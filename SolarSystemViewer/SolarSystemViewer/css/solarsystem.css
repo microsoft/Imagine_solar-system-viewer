@@ -1,0 +1,38 @@
+﻿body {
+    overflow: hidden;
+    padding: 0px;
+    margin: 0px;
+    color: white;
+    background-color: black;
+}
+
+div#hud > div.hud-panel {
+    position: absolute;
+    padding: 5px;
+}
+
+div#hud > div.hud-panel.top-left {
+    top: 0px;
+    left: 0px;
+    text-align: left;
+}
+
+div#hud > div.hud-panel.centertop {
+    top: 0px;
+    left: 50%;
+    text-align: center;
+    transform: translateX(-50%);
+}
+
+div#hud > div.hud-panel.centerbottom {
+    top: 85%;
+    left: 50%;
+    text-align: center;
+    transform: translateX(-50%) translateY(-50%);
+}
+
+div#hud > div.hud-panel.top-right {
+    top: 0px;
+    right: 0px;
+    text-align: right;
+}
